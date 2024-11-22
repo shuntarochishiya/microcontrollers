@@ -1,0 +1,200 @@
+C51 COMPILER V9.53.0.0   MAIN                                                              11/22/2024 18:26:29 PAGE 1   
+
+
+C51 COMPILER V9.53.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN .\Objects\main.obj
+COMPILER INVOKED BY: D:\Keil\C51\BIN\C51.EXE main.c OPTIMIZE(8,SPEED) BROWSE DEBUG OBJECTEXTEND PRINT(.\Listings\main.ls
+                    -t) TABS(2) OBJECT(.\Objects\main.obj)
+
+line level    source
+
+   1          #include <reg51.h>                // Include the register definitions for the 8051 microcontroller
+   2          #include "lcd.h"                   // Include the header file for controlling the LCD
+   3          
+   4          // Pin assignments for the keypad rows and columns
+   5          sbit r1 = P1^0;                  
+   6          sbit r2 = P1^1;                  
+   7          sbit r3 = P1^2;                  
+   8          sbit r4 = P1^3;                  
+   9          sbit c1 = P1^4;                  
+  10          sbit c2 = P1^5;                  
+  11          sbit c3 = P1^6;                  
+  12          sbit c4 = P1^7;                  
+  13          
+  14          // Variables for storing operands, operator, flags, and error handling
+  15          unsigned int a = 0, b = 0, y;    
+  16          unsigned char flag = 0, operator = 0, error = 0, result_displayed = 0; 
+  17          
+  18          // Function to create a delay
+  19          void delay(unsigned char t) {
+  20   1          unsigned int i, j;
+  21   1          for (i = 0; i < t; i++)         // Outer loop for controlling the delay
+  22   1              for (j = 0; j < 700; j++); // Inner loop for controlling the delay duration
+  23   1      }
+  24          
+  25          // Function to send a number to the LCD
+  26          void send_num(unsigned int x) {
+  27   1          char buf[6] = {0};             // Buffer to hold the string representation of the number
+  28   1          char i = 0;
+  29   1          while (x > 0) {                
+  30   2              buf[i++] = (x % 10) + '0'; // Convert the digit to a character and store it in the buffer
+  31   2              x /= 10;                    // Reduce x by a factor of 10
+  32   2          }
+  33   1          while (--i >= 0)                // Send the digits in reverse order to the LCD
+  34   1              lcd_dat(buf[i]);
+  35   1      }
+  36          
+  37          // Function to send a floating-point number to the LCD
+  38          void send_float(float x) {
+  39   1          int integer_part = (int)x;                        // Extract the integer part of the float
+  40   1          int decimal_part = (int)((x - integer_part) * 100); // Extract the decimal part and multiply by 100
+  41   1          send_num(integer_part);                          // Send the integer part to the LCD
+  42   1          lcd_dat('.');                                    // Send the decimal point to the LCD
+  43   1          lcd_dat(decimal_part / 10 + '0');                // Send the first digit of the decimal part
+  44   1          lcd_dat(decimal_part % 10 + '0');                // Send the second digit of the decimal part
+  45   1      }
+  46          
+  47          // Function to reset the calculator
+  48          void reset_calc() {
+  49   1          lcd_cmd(0x01);        // Clear the LCD screen
+  50   1          flag = operator = error = result_displayed = a = b = 0; // Reset all variables
+  51   1      }
+  52          
+  53          // Function to perform the calculation based on the operator
+  54          void calculate() {
+C51 COMPILER V9.53.0.0   MAIN                                                              11/22/2024 18:26:29 PAGE 2   
+
+  55   1          float result = 0;
+  56   1          lcd_cmd(0xc0);       // Move the cursor to the second row of the LCD
+  57   1      
+  58   1          // Perform the calculation based on the operator
+  59   1          if (operator == '+') {
+  60   2              result = (float)a + (float)b;
+  61   2          } else if (operator == '-') {
+  62   2              result = (float)a - (float)b;
+  63   2          } else if (operator == 'x') {
+  64   2              result = (float)a * (float)b;
+  65   2          } else if (operator == '/') {
+  66   2              if (b != 0) {                     // Check for division by zero
+  67   3                  result = (float)a / (float)b;
+  68   3              } else {
+  69   3                  lcd_string("Error: Div By 0");  // Display error message if division by zero
+  70   3                  delay(200);
+  71   3                  reset_calc();
+  72   3                  return;
+  73   3              }
+  74   2          }
+  75   1      
+  76   1          // Check for overflow
+  77   1          if (result > 65535) {
+  78   2              lcd_string("Error: Overflow");
+  79   2              delay(200);
+  80   2              reset_calc();
+  81   2              return;
+  82   2          }
+  83   1      
+  84   1          // Check for negative result and display the negative sign
+  85   1          if (result < 0) {
+  86   2              lcd_dat('-');
+  87   2              result = -result;
+  88   2          }
+  89   1      
+  90   1          // Send the result to the LCD
+  91   1          send_float(result);
+  92   1          result_displayed = 1; // Mark the result as displayed
+  93   1      }
+  94          
+  95          // Function to process the key pressed on the keypad
+  96          void process_key(unsigned char key) {
+  97   1          if (key == 'C') {    // If 'C' is pressed, reset the calculator
+  98   2              reset_calc();
+  99   2              return;
+ 100   2          }
+ 101   1      
+ 102   1          if (result_displayed) reset_calc(); // If result was displayed, reset the calculator
+ 103   1      
+ 104   1          if (key >= '0' && key <= '9') {    // If a number key is pressed
+ 105   2              unsigned int *target = flag ? &b : &a; // Determine whether to update a or b based on the flag
+ 106   2              if (*target > 6553 || (*target == 6553 && key > '5')) { // Prevent overflow
+ 107   3                  lcd_cmd(0x01);
+ 108   3                  lcd_string("Error: Overflow");
+ 109   3                  delay(200);
+ 110   3                  reset_calc();
+ 111   3              } else {
+ 112   3                  lcd_dat(key); // Display the key on the LCD
+ 113   3                  *target = *target * 10 + (key - '0'); // Update the target value (a or b)
+ 114   3              }
+ 115   2          } else if (key == '+' || key == '-' || key == 'x' || key == '/') { // If an operator is pressed
+ 116   2              if (flag) { // If the second operand is already entered, show an error
+C51 COMPILER V9.53.0.0   MAIN                                                              11/22/2024 18:26:29 PAGE 3   
+
+ 117   3                  lcd_cmd(0x01);
+ 118   3                  lcd_string("Invalid Input");
+ 119   3                  delay(200);
+ 120   3                  reset_calc();
+ 121   3              } else {
+ 122   3                  lcd_dat(key); // Display the operator
+ 123   3                  operator = key; // Set the operator
+ 124   3                  flag = 1; // Set the flag to indicate that the first operand is entered
+ 125   3              }
+ 126   2          } else if (key == '=') { // If '=' is pressed, calculate the result
+ 127   2              calculate();
+ 128   2          } else { // If an invalid key is pressed, show an error
+ 129   2              lcd_cmd(0x01);
+ 130   2              lcd_string("Invalid Input");
+ 131   2              delay(200);
+ 132   2              reset_calc();
+ 133   2          }
+ 134   1      }
+ 135          
+ 136          // Function to scan the keypad rows and columns to detect the pressed key
+ 137          void row_scan() {
+ 138   1          const unsigned char keys[4][4] = {   // Define the keypad layout
+ 139   1              {'7', '8', '9', '/'},
+ 140   1              {'4', '5', '6', 'x'},
+ 141   1              {'1', '2', '3', '-'},
+ 142   1              {'C', '0', '=', '+'}
+ 143   1          };
+ 144   1          unsigned char row, col;
+ 145   1          for (row = 0; row < 4; row++) {         // Loop through the rows
+ 146   2              P1 = ~(1 << row);                  // Activate the current row
+ 147   2              for (col = 0; col < 4; col++) {    // Loop through the columns
+ 148   3                  if (!(P1 & (1 << (col + 4)))) { // If a key is pressed in the current row and column
+ 149   4                      delay(32);               // Debounce the key
+ 150   4                      while (!(P1 & (1 << (col + 4)))); // Wait for the key release
+ 151   4                      process_key(keys[row][col]); // Process the key press
+ 152   4                      return;
+ 153   4                  }
+ 154   3              }
+ 155   2          }
+ 156   1      }
+ 157          
+ 158          // Main function
+ 159          void main() {
+ 160   1          P1 = 0xF0;             // Set the upper nibble of Port 1 to 1 (input) and the lower nibble to 0 (outpu
+             -t)
+ 161   1          lcd_init();            // Initialize the LCD
+ 162   1          lcd_string("Tatiana"); // Display "Tatiana" on the first row of the LCD
+ 163   1          lcd_cmd(0xc0);         // Move the cursor to the second row of the LCD
+ 164   1          lcd_string("Kazakevich"); // Display "Kazakevich" on the second row
+ 165   1          delay(200);            // Delay for a brief moment
+ 166   1          lcd_cmd(0x01);         // Clear the LCD screen
+ 167   1      
+ 168   1          while (1) row_scan();  // Continuously scan the keypad for input
+ 169   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   1103    ----
+   CONSTANT SIZE    =     87    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     10      46
+C51 COMPILER V9.53.0.0   MAIN                                                              11/22/2024 18:26:29 PAGE 4   
+
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
